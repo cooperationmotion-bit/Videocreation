@@ -15,3 +15,4 @@ python3 scripts/compose.py <seg_dir> <music.wav> out.mp4  # type + music + encod
 ```
 
 Cuts, timings and copy live in `SEGMENTS` (build_segments.sh) and `CUES` (compose.py).
+Look: low-key teal-green grade, light vignette, small bold split-word type (after the reference reel the client supplied).

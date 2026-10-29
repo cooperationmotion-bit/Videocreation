@@ -8,13 +8,13 @@ RAW=$1
 OUT=$2
 mkdir -p "$OUT"
 
-# Minimal cinematic grade: muted saturation, lifted/cool matte blacks,
-# warm-neutral highlights with a soft roll-off, greens pulled way down, gentle vignette.
-GRADE="huesaturation=hue=0:saturation=-0.55:intensity=-0.04:colors=g+y:strength=1,\
-eq=contrast=1.07:saturation=0.70:gamma=0.97,\
-curves=r='0/0.04 0.25/0.21 0.5/0.49 0.8/0.84 1/0.95':g='0/0.045 0.25/0.22 0.5/0.49 0.8/0.83 1/0.94':b='0/0.065 0.25/0.245 0.5/0.5 0.8/0.81 1/0.92',\
-colorbalance=rs=-0.03:bs=0.04:rh=0.03:bh=-0.03,\
-vignette=PI/5,noise=alls=7:allf=t,format=yuv420p"
+# Low-key cinematic grade (after the reference): dark, rolled-off highlights,
+# teal-green cast in shadows/highlights, warm skin kept, greens killed, light vignette, fine grain.
+GRADE="huesaturation=saturation=-0.6:colors=g+y:strength=1,\
+eq=contrast=1.12:saturation=0.78:gamma=0.93,\
+curves=master='0/0.03 0.3/0.18 0.6/0.47 0.85/0.70 1/0.80',\
+colorbalance=rs=-0.07:gs=0.015:bs=0.035:rm=-0.03:gm=0.025:bm=0.0:rh=-0.02:gh=0.05:bh=0.01,\
+vignette=PI/7,noise=alls=7:allf=t,format=yuv420p"
 
 # Per-clip reframing / normalisation
 pre() {

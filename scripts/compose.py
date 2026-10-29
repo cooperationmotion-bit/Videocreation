@@ -1,7 +1,7 @@
 """Composite graded segments + kinetic typography + music into the final reel.
 
-Minimal / bold editorial type: Inter Display Black, all caps, tight tracking,
-mask-reveal (text rises from behind an invisible line), cuts on the beat.
+Minimal / bold type after the reference: small Inter Display Bold caps, words split
+either side of the subject, soft rise-in on the beat, cuts on the beat.
 
 Usage: python3 compose.py <seg_dir> <music.wav> <out.mp4>
 """
@@ -16,14 +16,10 @@ W, H, FPS = 1080, 1920, 30
 BAR = 2.4
 DUR = 13 * BAR
 FONT_DIR = "/usr/share/fonts/opentype/inter/"
-BLACK = FONT_DIR + "InterDisplay-Black.otf"
 LIGHT = FONT_DIR + "InterDisplay-Light.otf"
 MED = FONT_DIR + "Inter-Medium.otf"
 INK = (242, 240, 235)
 BG = (11, 11, 12)
-X0 = 84  # left margin
-SAFE_BOTTOM = 1500  # keep clear of IG caption / buttons
-MAX_W = W - X0 - 150  # right rail (like/comment/share) stays clear
 
 seg_dir, music, out = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 SEGMENTS = sorted(seg_dir.glob("seg*.mp4"))
@@ -74,115 +70,76 @@ def ease_in(p):
     return p**3
 
 
-# (start, end, [(appear_t, text, font, size)], anchor_y)  — anchor_y = baseline of last line
+# Split-word layout after the reference: small bold words flanking the subject at a
+# fixed height, left word left-aligned at XL, right word right-aligned at XR.
+XL, XR = 150, 930  # XR keeps clear of the IG action rail
+SIZE = 60
+BOLD = FONT_DIR + "InterDisplay-Bold.otf"
+L, R = "L", "R"
+
+# (start, end, [(appear_t, text, side_or_x, y, font)])
 CUES = [
-    (0.35, 4.62, [(0.35, "FLEXIBILITY", BLACK, 150), (2.4, "IS STRENGTH.", BLACK, 150)]),
-    (4.8, 9.42, [(4.8, "MOBILITY", BLACK, 150), (6.0, "+ STRENGTH", BLACK, 150),
-                 (8.4, "= CONTROL.", BLACK, 150)]),
-    (9.6, 11.82, [(9.6, "OWN EVERY", BLACK, 150), (10.2, "RANGE.", BLACK, 150)]),
-    (12.0, 14.22, [(12.0, "STRONG", BLACK, 160), (12.6, "AT LENGTH.", BLACK, 160)]),
-    (14.4, 16.62, [(14.4, "STABLE", BLACK, 160), (15.0, "AT END RANGE.", BLACK, 118)]),
-    (16.8, 19.02, [(16.8, "LOAD", BLACK, 160), (17.4, "THE RANGE.", BLACK, 160)]),
-    # the break: music drops, type goes light — relaxing is one facet
-    (19.35, 23.82, [(19.35, "RELAXING", LIGHT, 140), (20.0, "INTO A STRETCH", LIGHT, 112),
-                    (21.6, "IS ONE PART.", LIGHT, 124)]),
-    (24.0, 26.22, [(24.0, "NOT THE", BLACK, 150), (24.6, "WHOLE", BLACK, 150),
-                   (25.2, "PICTURE.", BLACK, 150)]),
-    (26.4, 28.72, [(26.4, "TRAIN IT.", BLACK, 150), (27.0, "LOAD IT.", BLACK, 150),
-                   (27.6, "OWN IT.", BLACK, 150)]),
+    (0.35, 4.62, [(0.35, "FLEXIBILITY", 640, 820, BOLD), (2.4, "IS STRENGTH", 640, 900, BOLD)]),
+    (4.8, 7.12, [(4.8, "MOBILITY", L, 1450, BOLD), (6.0, "+ STRENGTH", R, 1450, BOLD)]),
+    (7.2, 9.42, [(7.2, "BUILDS", L, 1450, BOLD), (8.4, "CONTROL", R, 1450, BOLD)]),
+    (9.6, 11.82, [(9.6, "OWN EVERY", 640, 820, BOLD), (10.8, "RANGE", 640, 900, BOLD)]),
+    (12.0, 14.22, [(12.0, "STRONG", L, 1450, BOLD), (12.6, "AT LENGTH", R, 1450, BOLD)]),
+    (14.4, 16.62, [(14.4, "STABLE", L, 1450, BOLD), (15.0, "AT END RANGE", R, 1450, BOLD)]),
+    (16.8, 19.02, [(16.8, "LOAD", 640, 820, BOLD), (17.4, "THE RANGE", 640, 900, BOLD)]),
+    # the break: music drops, type goes light: relaxing is one facet
+    (19.35, 21.42, [(19.35, "RELAXING", L, 620, LIGHT), (20.0, "INTO IT", R, 620, LIGHT)]),
+    (21.6, 23.82, [(21.6, "IS ONE", L, 1480, LIGHT), (22.2, "PART", R, 1480, LIGHT)]),
+    (24.0, 26.22, [(24.0, "NOT THE", L, 960, BOLD), (24.6, "WHOLE PICTURE", R, 960, BOLD)]),
+    (26.4, 27.52, [(26.4, "TRAIN IT", L, 1450, BOLD), (27.0, "LOAD IT", R, 1450, BOLD)]),
+    (27.6, 28.72, [(27.6, "OWN IT", "C", 1450, BOLD)]),
 ]
-CHAPTERS = [(0, "01"), (4.8, "02"), (12.0, "03"), (16.8, "04"), (19.2, "05"), (24.0, "06")]
-REVEAL, EXIT = 0.42, 0.2
+REVEAL, EXIT, RISE = 0.32, 0.16, 14
+
+
+def with_alpha(img, a):
+    out = img.copy()
+    out.putalpha(out.getchannel("A").point(lambda v: v * a // 255))
+    return out
 
 
 def draw_cue(frame, t, cue):
     start, end, lines = cue
     if not (start <= t < end + EXIT):
         return
-    imgs = [line_img(txt, fp, sz) for _, txt, fp, sz in lines]
-    # auto-fit: keep the widest line clear of the IG action rail on the right
-    widest = max(i.width for i in imgs)
-    if widest > MAX_W:
-        k = MAX_W / widest
-        imgs = [line_img(txt, fp, int(sz * k)) for _, txt, fp, sz in lines]
-    gap = 6
-    total = sum(i.height for i in imgs) + gap * (len(imgs) - 1)
-    y = SAFE_BOTTOM - total
-    exit_p = ease_in((t - end) / EXIT) if t >= end else 0.0
-    for (at, *_), img in zip(lines, imgs):
-        if t >= at:
-            p = ease_out((t - at) / REVEAL)
-            # mask reveal: rise from below the line's own box; exit continues upward
-            dy = int(img.height * (1 - p)) - int(img.height * 1.05 * exit_p)
-            if abs(dy) >= img.height:
-                y += img.height + gap
-                continue
-            win = Image.new("RGBA", img.size, (0, 0, 0, 0))
-            win.alpha_composite(img, (0, max(dy, 0)) if dy >= 0 else (0, 0),
-                                (0, 0, img.width, img.height - dy) if dy >= 0 else (0, -dy, img.width, img.height))
-            frame.alpha_composite(win, (X0 - 6, y))
-        y += img.height + gap
-
-
-def draw_chrome(frame, t):
-    """Small tracked labels + hairline — the 'editorial' frame."""
-    if t >= 12 * BAR:
-        return
-    d = ImageDraw.Draw(frame)
-    lab = line_img("MOBILITY × STRENGTH", MED, 26, track=0.22, color=(242, 240, 235))
-    a = int(200 * ease_out((t - 0.2) / 0.6))
-    if a <= 0:
-        return
-    lab2 = lab.copy()
-    lab2.putalpha(lab2.getchannel("A").point(lambda v: v * a // 255))
-    frame.alpha_composite(lab2, (X0, 150))
-    chap = [c for c in CHAPTERS if c[0] <= t][-1][1]
-    num = line_img(f"{chap} / 06", MED, 26, track=0.18)
-    num2 = num.copy()
-    num2.putalpha(num2.getchannel("A").point(lambda v: v * a // 255))
-    frame.alpha_composite(num2, (W - X0 - num.width, 150))
-    # progress hairline
-    prog = min(t / (12 * BAR), 1)
-    y = 200
-    d.line([(X0, y), (W - X0, y)], fill=(242, 240, 235, a // 4), width=2)
-    d.line([(X0, y), (X0 + int((W - 2 * X0) * prog), y)], fill=(242, 240, 235, a), width=2)
+    fade_out = 1 - ease_in((t - end) / EXIT) if t >= end else 1.0
+    for at, txt, side, y, fp in lines:
+        if t < at:
+            continue
+        img = line_img(txt, fp, SIZE, track=-0.02)
+        p = ease_out((t - at) / REVEAL)
+        a = int(255 * p * fade_out)
+        if a <= 0:
+            continue
+        x = XL if side == L else XR - img.width if side == R else (W - img.width) // 2 if side == "C" else side
+        frame.alpha_composite(with_alpha(img, a), (int(x), int(y - img.height / 2 + RISE * (1 - p))))
 
 
 def end_card(t):
-    """Bar 12: black card, centred lock-up."""
+    """Bar 12: near-black card, one small bold line + tracked subtitle."""
     frame = Image.new("RGBA", (W, H), BG + (255,))
     lt = t - 12 * BAR
-    lines = [("MOBILITY", BLACK, 150, 0.0), ("× STRENGTH", BLACK, 150, 0.25)]
-    imgs = [line_img(a, b, c) for a, b, c, _ in lines]
-    y = H // 2 - (imgs[0].height + imgs[1].height + 8) // 2 - 60
-    for (_, _, _, at), img in zip(lines, imgs):
-        p = ease_out((lt - at) / REVEAL)
-        if p > 0:
-            dy = int(img.height * (1 - p))
-            if dy < img.height:
-                win = Image.new("RGBA", img.size, (0, 0, 0, 0))
-                win.alpha_composite(img, (0, dy), (0, 0, img.width, img.height - dy))
-                frame.alpha_composite(win, ((W - img.width) // 2, y))
-        y += img.height + 8
-    sub = line_img("FLEXIBILITY IS A STRENGTH SKILL", MED, 28, track=0.2)
-    a = int(255 * ease_out((lt - 0.7) / 0.6))
+    main = line_img("MOBILITY × STRENGTH", BOLD, SIZE, track=-0.02)
+    p = ease_out(lt / REVEAL)
+    frame.alpha_composite(with_alpha(main, int(255 * p)),
+                          ((W - main.width) // 2, int(H / 2 - main.height + RISE * (1 - p))))
+    sub = line_img("FLEXIBILITY IS A STRENGTH SKILL", MED, 24, track=0.22)
+    a = int(200 * ease_out((lt - 0.6) / 0.6))
     if a > 0:
-        s2 = sub.copy()
-        s2.putalpha(s2.getchannel("A").point(lambda v: v * a // 255))
-        frame.alpha_composite(s2, ((W - sub.width) // 2, y + 50))
-    d = ImageDraw.Draw(frame)
-    w = int(120 * ease_out((lt - 0.5) / 0.5))
-    if w > 0:
-        d.line([(W // 2 - w, y + 20), (W // 2 + w, y + 20)], fill=INK + (255,), width=3)
+        frame.alpha_composite(with_alpha(sub, a), ((W - sub.width) // 2, H // 2 + 30))
     return frame
 
 
 # bottom gradient for legibility
 grad = np.zeros((H, W, 4), np.uint8)
 ramp = np.clip((np.arange(H) - 900) / (H - 900), 0, 1) ** 1.6
-grad[..., 3] = (ramp * 175).astype(np.uint8)[:, None]
+grad[..., 3] = (ramp * 70).astype(np.uint8)[:, None]
 top = np.clip(1 - np.arange(H) / 380, 0, 1) ** 2
-grad[..., 3] = np.maximum(grad[..., 3], (top * 110).astype(np.uint8)[:, None])
+
 GRAD = Image.fromarray(grad, "RGBA")
 
 
@@ -224,7 +181,6 @@ while fi < total:
         img = img.resize((W, H), Image.BICUBIC, box=((W - cw) / 2, (H - ch) * 0.45, (W + cw) / 2, (H - ch) * 0.45 + ch))
         frame = img.convert("RGBA")
         frame.alpha_composite(GRAD)
-        draw_chrome(frame, t)
         for cue in CUES:
             draw_cue(frame, t, cue)
     else:
