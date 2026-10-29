@@ -164,7 +164,7 @@ enc = subprocess.Popen([
     "-r", str(FPS), "-i", "-", "-i", music,
     "-c:v", "libx264", "-preset", "slow", "-crf", "19", "-maxrate", "14M", "-bufsize", "28M", "-pix_fmt", "yuv420p",
     "-profile:v", "high", "-movflags", "+faststart",
-    "-c:a", "aac", "-b:a", "256k", "-af", "loudnorm=I=-14:TP=-1.5:LRA=9",
+    "-c:a", "aac", "-b:a", "256k", "-af", "loudnorm=I=-14:TP=-1.5:LRA=9,aresample=48000", "-ar", "48000",
     "-t", f"{DUR}", out], stdin=subprocess.PIPE)
 
 fi = 0
